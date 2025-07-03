@@ -5,10 +5,15 @@ import com.perfulandia.envios_api.model.Envio;
 import com.perfulandia.envios_api.service.EnvioService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.hateoas.EntityModel;
+import org.springframework.hateoas.CollectionModel;
 import org.springframework.web.bind.annotation.*;
+
+import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/envios")
 
@@ -31,19 +36,37 @@ public class EnvioController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    // Obtener un envío por su ID (formato DTO)
+    // Obtener un envío por su ID (formato DTO) + HATEOAS
     @GetMapping("/dto/{id}")
-    public ResponseEntity<EnvioDTO> obtenerEnvioDTOporId(@PathVariable Integer id) {
+    public ResponseEntity<EntityModel<EnvioDTO>> obtenerEnvioDTOporId(@PathVariable Integer id) {
         Optional<EnvioDTO> envioDTOOpt = envioService.obtenerEnvioDTOporId(id);
-        return envioDTOOpt.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+
+        return envioDTOOpt.map(envioDTO -> {
+            EntityModel<EnvioDTO> recurso = EntityModel.of(envioDTO);
+            recurso.add(linkTo(methodOn(EnvioController.class).obtenerEnvioDTOporId(id)).withSelfRel());
+            recurso.add(linkTo(methodOn(EnvioController.class).obtenerTodosLosEnviosDTO()).withRel("todosLosEnvios"));
+            return ResponseEntity.ok(recurso);
+        }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    // Listar todos los envíos en formato DTO
+    // Listar todos los envíos en formato DTO + HATEOAS
     @GetMapping("/dto")
-    public ResponseEntity<List<EnvioDTO>> obtenerTodosLosEnviosDTO() {
+    public ResponseEntity<CollectionModel<EntityModel<EnvioDTO>>> obtenerTodosLosEnviosDTO() {
         List<EnvioDTO> envios = envioService.obtenerTodosLosEnviosDTO();
-        return ResponseEntity.ok(envios);
+
+        List<EntityModel<EnvioDTO>> recursos = envios.stream()
+                .map(envioDTO -> {
+                    EntityModel<EnvioDTO> recurso = EntityModel.of(envioDTO);
+                    recurso.add(linkTo(methodOn(EnvioController.class)
+                            .obtenerEnvioDTOporId(envioDTO.getIdEnvio())).withSelfRel());
+                    return recurso;
+                })
+                .collect(Collectors.toList());
+
+        CollectionModel<EntityModel<EnvioDTO>> coleccion = CollectionModel.of(recursos);
+        coleccion.add(linkTo(methodOn(EnvioController.class).obtenerTodosLosEnviosDTO()).withSelfRel());
+
+        return ResponseEntity.ok(coleccion);
     }
 
     // Actualizar el estado de un envío
